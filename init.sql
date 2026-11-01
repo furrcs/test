@@ -496,9 +496,324 @@ CREATE TABLE IF NOT EXISTS exhibition_paintings (
     PRIMARY KEY (exhibition_id, painting_id)
 );
 
+DROP DATABASE IF EXISTS construction_company;
+CREATE DATABASE construction_company ENCODING 'UTF8';
+
+\c construction_company
+
+CREATE TABLE departments (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT
+);
+
+CREATE TABLE employees (
+    id SERIAL PRIMARY KEY,
+    last_name VARCHAR(80) NOT NULL,
+    first_name VARCHAR(80) NOT NULL,
+    middle_name VARCHAR(80),
+    title VARCHAR(120) NOT NULL,
+    hire_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    salary NUMERIC(12,2) NOT NULL CHECK (salary >= 0),
+    department_id INTEGER NOT NULL REFERENCES departments(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    phone VARCHAR(30),
+    email VARCHAR(160),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE clients (
+    id SERIAL PRIMARY KEY,
+    company_name VARCHAR(180) NOT NULL,
+    contact_name VARCHAR(160),
+    phone VARCHAR(30),
+    email VARCHAR(160),
+    address VARCHAR(250),
+    city VARCHAR(100),
+    country VARCHAR(100) NOT NULL DEFAULT 'Россия'
+);
+
+CREATE TABLE suppliers (
+    id SERIAL PRIMARY KEY,
+    company_name VARCHAR(180) NOT NULL UNIQUE,
+    contact_name VARCHAR(160),
+    phone VARCHAR(30),
+    email VARCHAR(160),
+    address VARCHAR(250),
+    country VARCHAR(100) NOT NULL DEFAULT 'Россия'
+);
+
+CREATE TABLE materials (
+    id SERIAL PRIMARY KEY,
+    material_name VARCHAR(180) NOT NULL UNIQUE,
+    unit VARCHAR(30) NOT NULL,
+    unit_price NUMERIC(14,2) NOT NULL CHECK (unit_price >= 0),
+    stock_quantity NUMERIC(14,3) NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+    min_stock NUMERIC(14,3) NOT NULL DEFAULT 0 CHECK (min_stock >= 0)
+);
+
+CREATE TABLE projects (
+    id SERIAL PRIMARY KEY,
+    project_name VARCHAR(180) NOT NULL UNIQUE,
+    start_date DATE NOT NULL,
+    end_date DATE,
+    status VARCHAR(40) NOT NULL DEFAULT 'Проектирование'
+        CHECK (status IN ('Проектирование','В работе','Приостановлен','Завершён')),
+    manager_id INTEGER REFERENCES employees(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CHECK (end_date IS NULL OR end_date >= start_date)
+);
+
+CREATE TABLE construction_objects (
+    id SERIAL PRIMARY KEY,
+    address VARCHAR(250) NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    object_type VARCHAR(100) NOT NULL,
+    area NUMERIC(14,2) NOT NULL CHECK (area > 0),
+    floors INTEGER NOT NULL CHECK (floors > 0),
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE TABLE contracts (
+    id SERIAL PRIMARY KEY,
+    contract_number VARCHAR(60) NOT NULL UNIQUE,
+    contract_date DATE NOT NULL,
+    total_amount NUMERIC(16,2) NOT NULL CHECK (total_amount > 0),
+    client_id INTEGER NOT NULL REFERENCES clients(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    status VARCHAR(40) NOT NULL DEFAULT 'Действует'
+        CHECK (status IN ('Черновик','Действует','Исполнен','Расторгнут'))
+);
+
+CREATE TABLE project_employees (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    role VARCHAR(120) NOT NULL,
+    UNIQUE(project_id, employee_id)
+);
+
+CREATE TABLE supplies (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    material_id INTEGER NOT NULL REFERENCES materials(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    supplier_id INTEGER REFERENCES suppliers(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    supply_date DATE NOT NULL,
+    quantity NUMERIC(14,3) NOT NULL CHECK (quantity > 0),
+    price NUMERIC(16,2) NOT NULL CHECK (price >= 0),
+    status VARCHAR(40) NOT NULL DEFAULT 'Получена'
+        CHECK (status IN ('Ожидается','В пути','Получена','Частично получена','Отменена'))
+);
+
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    order_number VARCHAR(60) NOT NULL UNIQUE,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    material_id INTEGER NOT NULL REFERENCES materials(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    quantity NUMERIC(14,3) NOT NULL CHECK (quantity > 0),
+    unit VARCHAR(30) NOT NULL,
+    unit_price NUMERIC(14,2) NOT NULL CHECK (unit_price >= 0),
+    order_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    planned_delivery_date DATE NOT NULL,
+    status VARCHAR(40) NOT NULL DEFAULT 'Создан'
+        CHECK (status IN ('Создан','Согласован','Заказан','В пути','Доставлен','Отменён')),
+    comment TEXT,
+    created_by INTEGER
+);
+
+CREATE TABLE vehicles (
+    id SERIAL PRIMARY KEY,
+    plate_number VARCHAR(20) NOT NULL UNIQUE,
+    vehicle_type VARCHAR(80) NOT NULL,
+    brand VARCHAR(100) NOT NULL,
+    capacity_tons NUMERIC(8,2) NOT NULL CHECK (capacity_tons > 0),
+    status VARCHAR(40) NOT NULL DEFAULT 'Свободен'
+        CHECK (status IN ('Свободен','Назначен','В рейсе','На обслуживании'))
+);
+
+CREATE TABLE drivers (
+    id SERIAL PRIMARY KEY,
+    employee_id INTEGER NOT NULL UNIQUE REFERENCES employees(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    license_number VARCHAR(40) NOT NULL UNIQUE,
+    phone VARCHAR(30),
+    status VARCHAR(40) NOT NULL DEFAULT 'Доступен'
+        CHECK (status IN ('Доступен','Назначен','В рейсе','Недоступен'))
+);
+
+CREATE TABLE deliveries (
+    id SERIAL PRIMARY KEY,
+    delivery_number VARCHAR(60) NOT NULL UNIQUE,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    vehicle_id INTEGER REFERENCES vehicles(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    driver_id INTEGER REFERENCES drivers(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    from_address VARCHAR(250) NOT NULL DEFAULT 'Склад',
+    to_address VARCHAR(250) NOT NULL,
+    planned_date DATE NOT NULL,
+    planned_time TIME NOT NULL DEFAULT '10:00',
+    actual_date DATE,
+    status VARCHAR(40) NOT NULL DEFAULT 'Запланирована'
+        CHECK (status IN ('Запланирована','Назначен транспорт','В пути','Доставлена','Отменена')),
+    comment TEXT
+);
+
+CREATE TABLE routes (
+    id SERIAL PRIMARY KEY,
+    delivery_id INTEGER NOT NULL REFERENCES deliveries(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    sequence_no INTEGER NOT NULL CHECK (sequence_no > 0),
+    address VARCHAR(250) NOT NULL,
+    planned_arrival TIME,
+    status VARCHAR(40) NOT NULL DEFAULT 'Ожидает'
+        CHECK (status IN ('Ожидает','Пройден','Пропущен')),
+    UNIQUE(delivery_id, sequence_no)
+);
+
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(80) NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role_name VARCHAR(80) NOT NULL CHECK (role_name IN ('Администратор','Менеджер','Сотрудник ПТО','Сотрудник ОМТС','Диспетчер гаража','Клиент')),
+    employee_id INTEGER UNIQUE REFERENCES employees(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    client_id INTEGER UNIQUE REFERENCES clients(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (employee_id IS NULL OR client_id IS NULL)
+);
+
+CREATE TABLE user_logs (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    action VARCHAR(100) NOT NULL,
+    entity_name VARCHAR(100),
+    entity_id INTEGER,
+    details TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_projects_status ON projects(status);
+CREATE INDEX idx_orders_status ON orders(status);
+CREATE INDEX idx_deliveries_date ON deliveries(planned_date);
+CREATE INDEX idx_supplies_project ON supplies(project_id);
+CREATE INDEX idx_logs_created_at ON user_logs(created_at);
+
+-- Демонстрационные данные: исходные данные пользователя сохранены и дополнены.
+INSERT INTO departments (name, description) VALUES
+('Администрация','Управление организацией и информационной системой'),
+('ПТО','Проектно-техническое сопровождение строительства'),
+('ОМТС','Закупка и снабжение строительными материалами'),
+('Гараж','Транспорт и доставка материалов');
+
+INSERT INTO employees (last_name, first_name, middle_name, title, hire_date, salary, department_id, phone, email) VALUES
+('Иванов','Алексей','Сергеевич','Главный инженер','2021-01-15',120000,2,'+79990000001','ivanov@stroy.example'),
+('Петров','Дмитрий','Олегович','Прораб','2022-03-10',95000,2,'+79990000002','petrov@stroy.example'),
+('Сидоров','Максим','Андреевич','Менеджер по закупкам','2023-05-20',85000,3,'+79990000003','sidorov@stroy.example'),
+('Смирнова','Елена','Игоревна','Администратор системы','2020-09-01',110000,1,'+79990000004','smirnova@stroy.example'),
+('Кузнецов','Олег','Викторович','Диспетчер гаража','2022-11-15',90000,4,'+79990000005','kuznetsov@stroy.example'),
+('Волкова','Анна','Павловна','Менеджер проектов','2024-02-01',98000,1,'+79990000006','volkova@stroy.example');
+
+INSERT INTO clients (company_name, contact_name, phone, email, address, city, country) VALUES
+('ООО СтройИнвест','Сергей Волков','+79991112233','volkov@stroyinvest.ru','ул. Ленина, 10','Москва','Россия'),
+('ООО АльфаСтрой','Ирина Морозова','+79991112234','info@alfastroy.ru','пр. Мира, 15','Санкт-Петербург','Россия'),
+('ЗАО Монолит','Павел Егоров','+79991112235','contact@monolit.ru','ул. Советская, 7','Казань','Россия');
+
+INSERT INTO suppliers (company_name, contact_name, phone, email, address, country) VALUES
+('МеталлТорг','Александр Крылов','+79995556677','sales@metalltorg.example','Промышленная, 1','Россия'),
+('БетонСнаб','Виктор Громов','+79995556678','info@betonsnab.example','Заводская, 4','Россия'),
+('ЛесМаркет','Николай Орлов','+79995556679','order@lesmarket.example','Лесная, 8','Россия');
+
+INSERT INTO materials (material_name, unit, unit_price, stock_quantity, min_stock) VALUES
+('Арматура А500','тонна',65000,18,5),
+('Бетон М300','м3',5800,140,30),
+('Цемент М500','мешок',450,700,100),
+('Кирпич облицовочный','шт',35,25000,5000),
+('Доска обрезная','м3',14000,28,8);
+
+INSERT INTO projects (project_name, start_date, end_date, status, manager_id) VALUES
+('ЖК Северный','2025-01-10','2027-12-31','В работе',1),
+('Бизнес-центр Плаза','2025-03-01','2026-10-30','В работе',2),
+('Школа №25','2025-02-15','2026-08-15','Проектирование',1);
+
+INSERT INTO construction_objects (address, city, object_type, area, floors, project_id) VALUES
+('ул. Парковая, 5','Москва','Жилой комплекс',25000,18,1),
+('ул. Парковая, 7','Москва','Жилой комплекс',18000,16,1),
+('пр. Мира, 25','Москва','Бизнес-центр',32000,22,2),
+('ул. Молодёжная, 18','Казань','Школа',12000,4,3);
+
+INSERT INTO contracts (contract_number, contract_date, total_amount, client_id, project_id, status) VALUES
+('CNT-2025-001','2025-01-05',250000000,1,1,'Действует'),
+('CNT-2025-002','2025-02-20',180000000,2,2,'Действует'),
+('CNT-2025-003','2025-02-01',95000000,3,3,'Действует');
+
+INSERT INTO project_employees (project_id, employee_id, role) VALUES
+(1,1,'Руководитель проекта'),(1,2,'Прораб'),(2,2,'Руководитель проекта'),(2,3,'Снабжение'),(3,1,'Главный инженер');
+
+INSERT INTO supplies (project_id, material_id, supplier_id, supply_date, quantity, price, status) VALUES
+(1,1,1,'2025-01-20',15,975000,'Получена'),
+(1,2,2,'2025-01-25',120,696000,'Получена'),
+(2,3,2,'2025-03-10',500,225000,'Получена'),
+(2,4,1,'2025-03-15',20000,700000,'Получена'),
+(3,5,3,'2025-02-25',30,420000,'Получена');
+
+INSERT INTO vehicles (plate_number, vehicle_type, brand, capacity_tons, status) VALUES
+('А123ВС777','Бортовой грузовик','КамАЗ',10,'Свободен'),
+('В456ОР799','Самосвал','КамАЗ',15,'Свободен'),
+('С789ТК750','Фургон','ГАЗ',3.5,'Свободен');
+
+INSERT INTO drivers (employee_id, license_number, phone, status) VALUES
+(5,'RU-DRV-0001','+79990000005','Доступен');
+
+-- Хеши паролей создаются Python-приложением при первом запуске, если seed-пользователей ещё нет.
+-- Ниже временные маркеры заменяются на валидные PBKDF2-хеши в файле setup_seed_users.py.
+ALTER TABLE orders ADD CONSTRAINT fk_orders_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+INSERT INTO users (username, password_hash, role_name, employee_id, client_id) VALUES
+('admin','RESET_ON_FIRST_LOGIN','Администратор',4,NULL),
+('manager','RESET_ON_FIRST_LOGIN','Менеджер',6,NULL),
+('pto','RESET_ON_FIRST_LOGIN','Сотрудник ПТО',1,NULL),
+('omts','RESET_ON_FIRST_LOGIN','Сотрудник ОМТС',3,NULL),
+('garage','RESET_ON_FIRST_LOGIN','Диспетчер гаража',5,NULL),
+('client1','RESET_ON_FIRST_LOGIN','Клиент',NULL,1);
+
+INSERT INTO orders (order_number, project_id, material_id, supplier_id, quantity, unit, unit_price, order_date, planned_delivery_date, status, comment) VALUES
+('ORD-2026-001',1,3,2,500,'мешок',450,CURRENT_DATE,CURRENT_DATE + 7,'Заказан','Цемент для объекта №1'),
+('ORD-2026-002',2,1,1,8,'тонна',65000,CURRENT_DATE,CURRENT_DATE + 10,'Согласован','Арматура для бизнес-центра'),
+('ORD-2026-003',3,5,3,12,'м3',14000,CURRENT_DATE,CURRENT_DATE + 14,'Создан','Пиломатериалы для школы');
+
+INSERT INTO deliveries (delivery_number, order_id, vehicle_id, driver_id, from_address, to_address, planned_date, planned_time, status, comment) VALUES
+('DLV-2026-001',1,1,1,'Склад ОМТС','ул. Парковая, 5, Москва',CURRENT_DATE + 7,'10:00','Назначен транспорт','Доставка цемента на объект №1'),
+('DLV-2026-002',2,2,1,'Склад поставщика','пр. Мира, 25, Москва',CURRENT_DATE + 10,'12:30','Запланирована','Доставка арматуры');
+
+INSERT INTO routes (delivery_id, sequence_no, address, planned_arrival, status) VALUES
+(1,1,'Склад ОМТС','09:00','Ожидает'),(1,2,'ул. Парковая, 5, Москва','10:00','Ожидает'),
+(2,1,'Склад поставщика','11:00','Ожидает'),(2,2,'пр. Мира, 25, Москва','12:30','Ожидает');
+
+-- Виды для удобного отображения связанных данных.
+CREATE VIEW v_client_contracts AS
+SELECT c.id AS contract_id, c.contract_number, c.contract_date, c.total_amount, c.status,
+       cl.company_name AS client, p.project_name AS project
+FROM contracts c JOIN clients cl ON cl.id=c.client_id JOIN projects p ON p.id=c.project_id;
+
+CREATE VIEW v_orders AS
+SELECT o.id, o.order_number, p.project_name AS project, m.material_name AS material,
+       s.company_name AS supplier, o.quantity, o.unit, o.unit_price,
+       o.planned_delivery_date, o.status
+FROM orders o JOIN projects p ON p.id=o.project_id
+JOIN materials m ON m.id=o.material_id JOIN suppliers s ON s.id=o.supplier_id;
+
+CREATE VIEW v_deliveries AS
+SELECT d.id, d.delivery_number, o.order_number, v.plate_number,
+       e.last_name || ' ' || e.first_name AS driver,
+       d.from_address, d.to_address, d.planned_date, d.planned_time, d.status
+FROM deliveries d JOIN orders o ON o.id=d.order_id
+LEFT JOIN vehicles v ON v.id=d.vehicle_id
+LEFT JOIN drivers dr ON dr.id=d.driver_id
+LEFT JOIN employees e ON e.id=dr.employee_id;
+
+
 DROP DATABASE IF EXISTS art_school;
 CREATE DATABASE art_school ENCODING 'UTF8';
 
 \c art_school
 
 \i art_school.sql
+
+insert into roles values (1, 'Админ');
+insert into employees values (1, 'тест', 'тест', 'тест', 'тест', 'тест', 'admin', '1234567890', 1);

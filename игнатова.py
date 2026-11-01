@@ -1618,7 +1618,7 @@ class SchoolV4(CompleteSchoolApp):
             self.conn = psycopg2.connect(
                 dbname=os.getenv("ART_SCHOOL_DB_NAME", "art_school"),
                 user=os.getenv("ART_SCHOOL_DB_USER", "postgres"),
-                password=os.getenv("ART_SCHOOL_DB_PASSWORD", "1"),
+                password=os.getenv("ART_SCHOOL_DB_PASSWORD", "1234567890"),
                 host=os.getenv("ART_SCHOOL_DB_HOST", "localhost"),
                 port=os.getenv("ART_SCHOOL_DB_PORT", "5432"),
                 connect_timeout=5,
